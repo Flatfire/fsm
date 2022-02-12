@@ -1,13 +1,8 @@
 /*
 Graph / Finite State Machine Designer
+License: MIT License
 
-MIT License
-
-Copyright (c) 2021 Samm Du
-Copyright (c) 2020 Emily Wilson
 Copyright (c) 2019 Markus Feng
-Copyright (c) 2015 Samuel Green
-Copyright (c) 2010 Evan Wallace
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,41 +21,165 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+-------------------------------------------------------------------------------
+ ORIGINAL LICENSE BELOW
+-------------------------------------------------------------------------------
+
+ Finite State Machine Designer (http://madebyevan.com/fsm/)
+ License: MIT License (see below)
+
+ Copyright (c) 2010 Evan Wallace
+
+ Permission is hereby granted, free of charge, to any person
+ obtaining a copy of this software and associated documentation
+ files (the "Software"), to deal in the Software without
+ restriction, including without limitation the rights to use,
+ copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the
+ Software is furnished to do so, subject to the following
+ conditions:
+
+ The above copyright notice and this permission notice shall be
+ included in all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ OTHER DEALINGS IN THE SOFTWARE.
 */
 
-// draw using this instead of a canvas and call toLaTeX() afterward
-function ExportAsLaTeX() {
-	this._points = [];
-	this._texData = '';
-	this._scale = 0.1; // to convert pixels to document space (TikZ breaks if the numbers get too big, above 500?)
+function Link(a, b, directed) {
+	this.nodeA = a;
+	this.nodeB = b;
+	this.text = '';
+	this.lineAngleAdjust = 0; // value to add to textAngle when link is straight line
 
-	this.toLaTeX = function() {
-		return '\\documentclass[12pt]{article}\n' +
-			'\\usepackage{tikz}\n' +
-			'\n' +
-			'\\begin{document}\n' +
-			'\n' +
-			'\\begin{center}\n' +
-			'\\begin{tikzpicture}[scale=0.2]\n' +
-			'\\tikzstyle{every node}+=[inner sep=0pt]\n' +
-			this._texData +
-			'\\end{tikzpicture}\n' +
-			'\\end{center}\n' +
-			'\n' +
-			'\\end{document}\n';
-	};
+	this.directed = directed;
 
-	this.beginPath = function() {
-		this._points = [];
+	// make anchor point relative to the locations of nodeA and nodeB
+	this.parallelPart = 0.5; // percentage from nodeA to nodeB
+	this.perpendicularPart = 0; // pixels from line between nodeA and nodeB
+}
+
+Link.prototype.getAnchorPoint = function() {
+	var dx = this.nodeB.x - this.nodeA.x;
+	var dy = this.nodeB.y - this.nodeA.y;
+	var scale = Math.sqrt(dx * dx + dy * dy);
+	return {
+		'x': this.nodeA.x + dx * this.parallelPart - dy * this.perpendicularPart / scale,
+		'y': this.nodeA.y + dy * this.parallelPart + dx * this.perpendicularPart / scale
 	};
-	this.arc = function(x, y, radius, startAngle, endAngle, isReversed) {
-		x *= this._scale;
-		y *= this._scale;
-		radius *= this._scale;
-		if(endAngle - startAngle == Math.PI * 2) {
-			this._texData += '\\draw [' + this.strokeStyle + '] (' + fixed(x, 3) + ',' + fixed(-y, 3) + ') circle (' + fixed(radius, 3) + ');\n';
+};
+
+Link.prototype.setAnchorPoint = function(x, y) {
+	var dx = this.nodeB.x - this.nodeA.x;
+	var dy = this.nodeB.y - this.nodeA.y;
+	var scale = Math.sqrt(dx * dx + dy * dy);
+	this.parallelPart = (dx * (x - this.nodeA.x) + dy * (y - this.nodeA.y)) / (scale * scale);
+	this.perpendicularPart = (dx * (y - this.nodeA.y) - dy * (x - this.nodeA.x)) / scale;
+	// snap to a straight line
+	if(this.parallelPart > 0 && this.parallelPart < 1 && Math.abs(this.perpendicularPart) < snapToPadding) {
+		this.lineAngleAdjust = (this.perpendicularPart < 0) * Math.PI;
+		this.perpendicularPart = 0;
+	}
+};
+
+Link.prototype.getEndPointsAndCircle = function() {
+	if(this.perpendicularPart == 0) {
+		var midX = (this.nodeA.x + this.nodeB.x) / 2;
+		var midY = (this.nodeA.y + this.nodeB.y) / 2;
+		var start = this.nodeA.closestPointOnCircle(midX, midY);
+		var end = this.nodeB.closestPointOnCircle(midX, midY);
+		return {
+			'hasCircle': false,
+			'startX': start.x,
+			'startY': start.y,
+			'endX': end.x,
+			'endY': end.y,
+		};
+	}
+	var anchor = this.getAnchorPoint();
+	var circle = circleFromThreePoints(this.nodeA.x, this.nodeA.y, this.nodeB.x, this.nodeB.y, anchor.x, anchor.y);
+	var isReversed = (this.perpendicularPart > 0);
+	var reverseScale = isReversed ? 1 : -1;
+	var startAngle = Math.atan2(this.nodeA.y - circle.y, this.nodeA.x - circle.x) - reverseScale * nodeRadius / circle.radius;
+	var endAngle = Math.atan2(this.nodeB.y - circle.y, this.nodeB.x - circle.x) + reverseScale * nodeRadius / circle.radius;
+	var startX = circle.x + circle.radius * Math.cos(startAngle);
+	var startY = circle.y + circle.radius * Math.sin(startAngle);
+	var endX = circle.x + circle.radius * Math.cos(endAngle);
+	var endY = circle.y + circle.radius * Math.sin(endAngle);
+	return {
+		'hasCircle': true,
+		'startX': startX,
+		'startY': startY,
+		'endX': endX,
+		'endY': endY,
+		'startAngle': startAngle,
+		'endAngle': endAngle,
+		'circleX': circle.x,
+		'circleY': circle.y,
+		'circleRadius': circle.radius,
+		'reverseScale': reverseScale,
+		'isReversed': isReversed,
+	};
+};
+
+Link.prototype.draw = function(c) {
+	var stuff = this.getEndPointsAndCircle();
+	// draw arc
+	c.beginPath();
+	if(stuff.hasCircle) {
+		c.arc(stuff.circleX, stuff.circleY, stuff.circleRadius, stuff.startAngle, stuff.endAngle, stuff.isReversed);
+	} else {
+		c.moveTo(stuff.startX, stuff.startY);
+		c.lineTo(stuff.endX, stuff.endY);
+	}
+	c.stroke();
+	
+	// draw the head of the arrow
+	if (this.directed) {
+		if(stuff.hasCircle) {
+			drawArrow(c, stuff.endX, stuff.endY, stuff.endAngle - stuff.reverseScale * (Math.PI / 2));
 		} else {
-			if(isReversed) {
+			drawArrow(c, stuff.endX, stuff.endY, Math.atan2(stuff.endY - stuff.startY, stuff.endX - stuff.startX));
+		}
+	}
+
+	// draw the text
+	if(stuff.hasCircle) {
+		var startAngle = stuff.startAngle;
+		var endAngle = stuff.endAngle;
+		if(endAngle < startAngle) {
+			endAngle += Math.PI * 2;
+		}
+		var textAngle = (startAngle + endAngle) / 2 + stuff.isReversed * Math.PI;
+		var textX = stuff.circleX + stuff.circleRadius * Math.cos(textAngle);
+		var textY = stuff.circleY + stuff.circleRadius * Math.sin(textAngle);
+		drawText(c, this.text, textX, textY, textAngle, selectedObject == this);
+	} else {
+		var textX = (stuff.startX + stuff.endX) / 2;
+		var textY = (stuff.startY + stuff.endY) / 2;
+		var textAngle = Math.atan2(stuff.endX - stuff.startX, stuff.startY - stuff.endY);
+		drawText(c, this.text, textX, textY, textAngle + this.lineAngleAdjust, selectedObject == this);
+	}
+};
+
+Link.prototype.containsPoint = function(x, y) {
+	var stuff = this.getEndPointsAndCircle();
+	if(stuff.hasCircle) {
+		var dx = x - stuff.circleX;
+		var dy = y - stuff.circleY;
+		var distance = Math.sqrt(dx*dx + dy*dy) - stuff.circleRadius;
+		if(Math.abs(distance) < hitTargetPadding) {
+			var angle = Math.atan2(dy, dx);
+			var startAngle = stuff.startAngle;
+			var endAngle = stuff.endAngle;
+			if(stuff.isReversed) {
 				var temp = startAngle;
 				startAngle = endAngle;
 				endAngle = temp;
@@ -68,165 +187,73 @@ function ExportAsLaTeX() {
 			if(endAngle < startAngle) {
 				endAngle += Math.PI * 2;
 			}
-			// TikZ needs the angles to be in between -2pi and 2pi or it breaks
-			if(Math.min(startAngle, endAngle) < -2*Math.PI) {
-				startAngle += 2*Math.PI;
-				endAngle += 2*Math.PI;
-			} else if(Math.max(startAngle, endAngle) > 2*Math.PI) {
-				startAngle -= 2*Math.PI;
-				endAngle -= 2*Math.PI;
+			if(angle < startAngle) {
+				angle += Math.PI * 2;
+			} else if(angle > endAngle) {
+				angle -= Math.PI * 2;
 			}
-			startAngle = -startAngle;
-			endAngle = -endAngle;
-			this._texData += '\\draw [' + this.strokeStyle + '] (' + fixed(x + radius * Math.cos(startAngle), 3) + ',' + fixed(-y + radius * Math.sin(startAngle), 3) + ') arc (' + fixed(startAngle * 180 / Math.PI, 5) + ':' + fixed(endAngle * 180 / Math.PI, 5) + ':' + fixed(radius, 3) + ');\n';
+			return (angle > startAngle && angle < endAngle);
 		}
-	};
-	this.moveTo = this.lineTo = function(x, y) {
-		x *= this._scale;
-		y *= this._scale;
-		this._points.push({ 'x': x, 'y': y });
-	};
-	this.stroke = function() {
-		if(this._points.length == 0) return;
-		this._texData += '\\draw [' + this.strokeStyle + ']';
-		for(var i = 0; i < this._points.length; i++) {
-			var p = this._points[i];
-			this._texData += (i > 0 ? ' --' : '') + ' (' + fixed(p.x, 2) + ',' + fixed(-p.y, 2) + ')';
-		}
-		this._texData += ';\n';
-	};
-	this.fill = function() {
-		if(this._points.length == 0) return;
-		this._texData += '\\fill [' + this.strokeStyle + ']';
-		for(var i = 0; i < this._points.length; i++) {
-			var p = this._points[i];
-			this._texData += (i > 0 ? ' --' : '') + ' (' + fixed(p.x, 2) + ',' + fixed(-p.y, 2) + ')';
-		}
-		this._texData += ';\n';
-	};
-	this.measureText = function(text) {
-		var c = canvas.getContext('2d');
-		c.font = '20px "Roboto", "Ubuntu", "Segoe UI", "Calibri", sans-serif';
-		return c.measureText(text);
-	};
-	this.advancedFillText = function(text, originalText, x, y, angleOrNull) {
-		if(text.replace(' ', '').length > 0) {
-			var nodeParams = '';
-			// x and y start off as the center of the text, but will be moved to one side of the box when angleOrNull != null
-			if(angleOrNull != null) {
-				var width = this.measureText(text).width;
-				var dx = Math.cos(angleOrNull);
-				var dy = Math.sin(angleOrNull);
-				if(Math.abs(dx) > Math.abs(dy)) {
-					if(dx > 0) nodeParams = '[right] ', x -= width / 2;
-					else nodeParams = '[left] ', x += width / 2;
-				} else {
-					if(dy > 0) nodeParams = '[below] ', y -= 10;
-					else nodeParams = '[above] ', y += 10;
-				}
-			}
-			x *= this._scale;
-			y *= this._scale;
-			this._texData += '\\draw (' + fixed(x, 2) + ',' + fixed(-y, 2) + ') node ' + nodeParams + '{$' + originalText.replace(/ /g, '\\mbox{ }') + '$};\n';
-		}
-	};
+	} else {
+		var dx = stuff.endX - stuff.startX;
+		var dy = stuff.endY - stuff.startY;
+		var length = Math.sqrt(dx*dx + dy*dy);
+		var percent = (dx * (x - stuff.startX) + dy * (y - stuff.startY)) / (length * length);
+		var distance = (dx * (y - stuff.startY) - dy * (x - stuff.startX)) / length;
+		return (percent > 0 && percent < 1 && Math.abs(distance) < hitTargetPadding);
+	}
+	return false;
+};
 
-	this.translate = this.save = this.restore = this.clearRect = function(){};
+function Node(x, y) {
+	this.x = x;
+	this.y = y;
+	this.mouseOffsetX = 0;
+	this.mouseOffsetY = 0;
+	this.isAcceptState = false;
+	this.text = '';
 }
 
-// draw using this instead of a canvas and call toSVG() afterward
-function ExportAsSVG() {
-	this.fillStyle = 'black';
-	this.strokeStyle = 'black';
-	this.lineWidth = 1;
-	this.font = '12px "Ubuntu Mono", "Courier", monospace';
-	this._points = [];
-	this._svgData = '';
-	this._transX = 0;
-	this._transY = 0;
+Node.prototype.setMouseStart = function(x, y) {
+	this.mouseOffsetX = this.x - x;
+	this.mouseOffsetY = this.y - y;
+};
 
-	this.toSVG = function() {
-		return '<?xml version="1.0" standalone="no"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n\n<svg width="800" height="600" version="1.1" xmlns="http://www.w3.org/2000/svg">\n' + this._svgData + '</svg>\n';
-	};
+Node.prototype.setAnchorPoint = function(x, y) {
+	this.x = x + this.mouseOffsetX;
+	this.y = y + this.mouseOffsetY;
+};
 
-	this.beginPath = function() {
-		this._points = [];
-	};
-	this.arc = function(x, y, radius, startAngle, endAngle, isReversed) {
-		x += this._transX;
-		y += this._transY;
-		var style = 'stroke="' + this.strokeStyle + '" stroke-width="' + this.lineWidth + '" fill="none"';
+Node.prototype.draw = function(c) {
+	// draw the circle
+	c.beginPath();
+	c.arc(this.x, this.y, nodeRadius, 0, 2 * Math.PI, false);
+	c.stroke();
 
-		if(endAngle - startAngle == Math.PI * 2) {
-			this._svgData += '\t<ellipse ' + style + ' cx="' + fixed(x, 3) + '" cy="' + fixed(y, 3) + '" rx="' + fixed(radius, 3) + '" ry="' + fixed(radius, 3) + '"/>\n';
-		} else {
-			if(isReversed) {
-				var temp = startAngle;
-				startAngle = endAngle;
-				endAngle = temp;
-			}
+	// draw the text
+	drawText(c, this.text, this.x, this.y, null, selectedObject == this);
 
-			if(endAngle < startAngle) {
-				endAngle += Math.PI * 2;
-			}
+	// draw a double circle for an accept state
+	if(this.isAcceptState) {
+		c.beginPath();
+		c.arc(this.x, this.y, nodeRadius - 6, 0, 2 * Math.PI, false);
+		c.stroke();
+	}
+};
 
-			var startX = x + radius * Math.cos(startAngle);
-			var startY = y + radius * Math.sin(startAngle);
-			var endX = x + radius * Math.cos(endAngle);
-			var endY = y + radius * Math.sin(endAngle);
-			var useGreaterThan180 = (Math.abs(endAngle - startAngle) > Math.PI);
-			var goInPositiveDirection = 1;
+Node.prototype.closestPointOnCircle = function(x, y) {
+	var dx = x - this.x;
+	var dy = y - this.y;
+	var scale = Math.sqrt(dx * dx + dy * dy);
+	return {
+		'x': this.x + dx * nodeRadius / scale,
+		'y': this.y + dy * nodeRadius / scale,
+	};
+};
 
-			this._svgData += '\t<path ' + style + ' d="';
-			this._svgData += 'M ' + fixed(startX, 3) + ',' + fixed(startY, 3) + ' '; // startPoint(startX, startY)
-			this._svgData += 'A ' + fixed(radius, 3) + ',' + fixed(radius, 3) + ' '; // radii(radius, radius)
-			this._svgData += '0 '; // value of 0 means perfect circle, others mean ellipse
-			this._svgData += +useGreaterThan180 + ' ';
-			this._svgData += +goInPositiveDirection + ' ';
-			this._svgData += fixed(endX, 3) + ',' + fixed(endY, 3); // endPoint(endX, endY)
-			this._svgData += '"/>\n';
-		}
-	};
-	this.moveTo = this.lineTo = function(x, y) {
-		x += this._transX;
-		y += this._transY;
-		this._points.push({ 'x': x, 'y': y });
-	};
-	this.stroke = function() {
-		if(this._points.length == 0) return;
-		this._svgData += '\t<polygon stroke="' + this.strokeStyle + '" stroke-width="' + this.lineWidth + '" points="';
-		for(var i = 0; i < this._points.length; i++) {
-			this._svgData += (i > 0 ? ' ' : '') + fixed(this._points[i].x, 3) + ',' + fixed(this._points[i].y, 3);
-		}
-		this._svgData += '"/>\n';
-	};
-	this.fill = function() {
-		if(this._points.length == 0) return;
-		this._svgData += '\t<polygon fill="' + this.fillStyle + '" stroke-width="' + this.lineWidth + '" points="';
-		for(var i = 0; i < this._points.length; i++) {
-			this._svgData += (i > 0 ? ' ' : '') + fixed(this._points[i].x, 3) + ',' + fixed(this._points[i].y, 3);
-		}
-		this._svgData += '"/>\n';
-	};
-	this.measureText = function(text) {
-		var c = canvas.getContext('2d');
-		c.font = '20px "Roboto", "Ubuntu", "Segoe UI", "Calibri", sans-serif';
-		return c.measureText(text);
-	};
-	this.fillText = function(text, x, y) {
-		x += this._transX;
-		y += this._transY;
-		if(text.replace(' ', '').length > 0) {
-			this._svgData += '\t<text x="' + fixed(x, 3) + '" y="' + fixed(y, 3) + '" font-family="Roboto, Ubuntu, Segoe UI, Calibri, sans-serif" font-size="20">' + textToXML(text) + '</text>\n';
-		}
-	};
-	this.translate = function(x, y) {
-		this._transX = x;
-		this._transY = y;
-	};
-
-	this.save = this.restore = this.clearRect = function(){};
-}
+Node.prototype.containsPoint = function(x, y) {
+	return (x - this.x)*(x - this.x) + (y - this.y)*(y - this.y) < nodeRadius*nodeRadius;
+};
 
 function SelfLink(node, mouse, directed) {
 	this.node = node;
@@ -389,133 +416,39 @@ TemporaryLink.prototype.draw = function(c) {
 	}
 };
 
-function Link(a, b, directed) {
-	this.nodeA = a;
-	this.nodeB = b;
-	this.text = '';
-	this.lineAngleAdjust = 0; // value to add to textAngle when link is straight line
+// draw using this instead of a canvas and call toLaTeX() afterward
+function ExportAsLaTeX() {
+	this._points = [];
+	this._texData = '';
+	this._scale = 0.1; // to convert pixels to document space (TikZ breaks if the numbers get too big, above 500?)
 
-	this.directed = directed;
-
-	// make anchor point relative to the locations of nodeA and nodeB
-	this.parallelPart = 0.5; // percentage from nodeA to nodeB
-	this.perpendicularPart = 0; // pixels from line between nodeA and nodeB
-}
-
-Link.prototype.getAnchorPoint = function() {
-	var dx = this.nodeB.x - this.nodeA.x;
-	var dy = this.nodeB.y - this.nodeA.y;
-	var scale = Math.sqrt(dx * dx + dy * dy);
-	return {
-		'x': this.nodeA.x + dx * this.parallelPart - dy * this.perpendicularPart / scale,
-		'y': this.nodeA.y + dy * this.parallelPart + dx * this.perpendicularPart / scale
+	this.toLaTeX = function() {
+		return '\\documentclass[12pt]{article}\n' +
+			'\\usepackage{tikz}\n' +
+			'\n' +
+			'\\begin{document}\n' +
+			'\n' +
+			'\\begin{center}\n' +
+			'\\begin{tikzpicture}[scale=0.2]\n' +
+			'\\tikzstyle{every node}+=[inner sep=0pt]\n' +
+			this._texData +
+			'\\end{tikzpicture}\n' +
+			'\\end{center}\n' +
+			'\n' +
+			'\\end{document}\n';
 	};
-};
 
-Link.prototype.setAnchorPoint = function(x, y) {
-	var dx = this.nodeB.x - this.nodeA.x;
-	var dy = this.nodeB.y - this.nodeA.y;
-	var scale = Math.sqrt(dx * dx + dy * dy);
-	this.parallelPart = (dx * (x - this.nodeA.x) + dy * (y - this.nodeA.y)) / (scale * scale);
-	this.perpendicularPart = (dx * (y - this.nodeA.y) - dy * (x - this.nodeA.x)) / scale;
-	// snap to a straight line
-	if(this.parallelPart > 0 && this.parallelPart < 1 && Math.abs(this.perpendicularPart) < snapToPadding) {
-		this.lineAngleAdjust = (this.perpendicularPart < 0) * Math.PI;
-		this.perpendicularPart = 0;
-	}
-};
-
-Link.prototype.getEndPointsAndCircle = function() {
-	if(this.perpendicularPart == 0) {
-		var midX = (this.nodeA.x + this.nodeB.x) / 2;
-		var midY = (this.nodeA.y + this.nodeB.y) / 2;
-		var start = this.nodeA.closestPointOnCircle(midX, midY);
-		var end = this.nodeB.closestPointOnCircle(midX, midY);
-		return {
-			'hasCircle': false,
-			'startX': start.x,
-			'startY': start.y,
-			'endX': end.x,
-			'endY': end.y,
-		};
-	}
-	var anchor = this.getAnchorPoint();
-	var circle = circleFromThreePoints(this.nodeA.x, this.nodeA.y, this.nodeB.x, this.nodeB.y, anchor.x, anchor.y);
-	var isReversed = (this.perpendicularPart > 0);
-	var reverseScale = isReversed ? 1 : -1;
-	var startAngle = Math.atan2(this.nodeA.y - circle.y, this.nodeA.x - circle.x) - reverseScale * nodeRadius / circle.radius;
-	var endAngle = Math.atan2(this.nodeB.y - circle.y, this.nodeB.x - circle.x) + reverseScale * nodeRadius / circle.radius;
-	var startX = circle.x + circle.radius * Math.cos(startAngle);
-	var startY = circle.y + circle.radius * Math.sin(startAngle);
-	var endX = circle.x + circle.radius * Math.cos(endAngle);
-	var endY = circle.y + circle.radius * Math.sin(endAngle);
-	return {
-		'hasCircle': true,
-		'startX': startX,
-		'startY': startY,
-		'endX': endX,
-		'endY': endY,
-		'startAngle': startAngle,
-		'endAngle': endAngle,
-		'circleX': circle.x,
-		'circleY': circle.y,
-		'circleRadius': circle.radius,
-		'reverseScale': reverseScale,
-		'isReversed': isReversed,
+	this.beginPath = function() {
+		this._points = [];
 	};
-};
-
-Link.prototype.draw = function(c) {
-	var stuff = this.getEndPointsAndCircle();
-	// draw arc
-	c.beginPath();
-	if(stuff.hasCircle) {
-		c.arc(stuff.circleX, stuff.circleY, stuff.circleRadius, stuff.startAngle, stuff.endAngle, stuff.isReversed);
-	} else {
-		c.moveTo(stuff.startX, stuff.startY);
-		c.lineTo(stuff.endX, stuff.endY);
-	}
-	c.stroke();
-
-	// draw the head of the arrow
-	if (this.directed) {
-		if(stuff.hasCircle) {
-			drawArrow(c, stuff.endX, stuff.endY, stuff.endAngle - stuff.reverseScale * (Math.PI / 2));
+	this.arc = function(x, y, radius, startAngle, endAngle, isReversed) {
+		x *= this._scale;
+		y *= this._scale;
+		radius *= this._scale;
+		if(endAngle - startAngle == Math.PI * 2) {
+			this._texData += '\\draw [' + this.strokeStyle + '] (' + fixed(x, 3) + ',' + fixed(-y, 3) + ') circle (' + fixed(radius, 3) + ');\n';
 		} else {
-			drawArrow(c, stuff.endX, stuff.endY, Math.atan2(stuff.endY - stuff.startY, stuff.endX - stuff.startX));
-		}
-	}
-
-	// draw the text
-	if(stuff.hasCircle) {
-		var startAngle = stuff.startAngle;
-		var endAngle = stuff.endAngle;
-		if(endAngle < startAngle) {
-			endAngle += Math.PI * 2;
-		}
-		var textAngle = (startAngle + endAngle) / 2 + stuff.isReversed * Math.PI;
-		var textX = stuff.circleX + stuff.circleRadius * Math.cos(textAngle);
-		var textY = stuff.circleY + stuff.circleRadius * Math.sin(textAngle);
-		drawText(c, this.text, textX, textY, textAngle, selectedObject == this);
-	} else {
-		var textX = (stuff.startX + stuff.endX) / 2;
-		var textY = (stuff.startY + stuff.endY) / 2;
-		var textAngle = Math.atan2(stuff.endX - stuff.startX, stuff.startY - stuff.endY);
-		drawText(c, this.text, textX, textY, textAngle + this.lineAngleAdjust, selectedObject == this);
-	}
-};
-
-Link.prototype.containsPoint = function(x, y) {
-	var stuff = this.getEndPointsAndCircle();
-	if(stuff.hasCircle) {
-		var dx = x - stuff.circleX;
-		var dy = y - stuff.circleY;
-		var distance = Math.sqrt(dx*dx + dy*dy) - stuff.circleRadius;
-		if(Math.abs(distance) < hitTargetPadding) {
-			var angle = Math.atan2(dy, dx);
-			var startAngle = stuff.startAngle;
-			var endAngle = stuff.endAngle;
-			if(stuff.isReversed) {
+			if(isReversed) {
 				var temp = startAngle;
 				startAngle = endAngle;
 				endAngle = temp;
@@ -523,76 +456,169 @@ Link.prototype.containsPoint = function(x, y) {
 			if(endAngle < startAngle) {
 				endAngle += Math.PI * 2;
 			}
-			if(angle < startAngle) {
-				angle += Math.PI * 2;
-			} else if(angle > endAngle) {
-				angle -= Math.PI * 2;
+			// TikZ needs the angles to be in between -2pi and 2pi or it breaks
+			if(Math.min(startAngle, endAngle) < -2*Math.PI) {
+				startAngle += 2*Math.PI;
+				endAngle += 2*Math.PI;
+			} else if(Math.max(startAngle, endAngle) > 2*Math.PI) {
+				startAngle -= 2*Math.PI;
+				endAngle -= 2*Math.PI;
 			}
-			return (angle > startAngle && angle < endAngle);
+			startAngle = -startAngle;
+			endAngle = -endAngle;
+			this._texData += '\\draw [' + this.strokeStyle + '] (' + fixed(x + radius * Math.cos(startAngle), 3) + ',' + fixed(-y + radius * Math.sin(startAngle), 3) + ') arc (' + fixed(startAngle * 180 / Math.PI, 5) + ':' + fixed(endAngle * 180 / Math.PI, 5) + ':' + fixed(radius, 3) + ');\n';
 		}
-	} else {
-		var dx = stuff.endX - stuff.startX;
-		var dy = stuff.endY - stuff.startY;
-		var length = Math.sqrt(dx*dx + dy*dy);
-		var percent = (dx * (x - stuff.startX) + dy * (y - stuff.startY)) / (length * length);
-		var distance = (dx * (y - stuff.startY) - dy * (x - stuff.startX)) / length;
-		return (percent > 0 && percent < 1 && Math.abs(distance) < hitTargetPadding);
-	}
-	return false;
-};
+	};
+	this.moveTo = this.lineTo = function(x, y) {
+		x *= this._scale;
+		y *= this._scale;
+		this._points.push({ 'x': x, 'y': y });
+	};
+	this.stroke = function() {
+		if(this._points.length == 0) return;
+		this._texData += '\\draw [' + this.strokeStyle + ']';
+		for(var i = 0; i < this._points.length; i++) {
+			var p = this._points[i];
+			this._texData += (i > 0 ? ' --' : '') + ' (' + fixed(p.x, 2) + ',' + fixed(-p.y, 2) + ')';
+		}
+		this._texData += ';\n';
+	};
+	this.fill = function() {
+		if(this._points.length == 0) return;
+		this._texData += '\\fill [' + this.strokeStyle + ']';
+		for(var i = 0; i < this._points.length; i++) {
+			var p = this._points[i];
+			this._texData += (i > 0 ? ' --' : '') + ' (' + fixed(p.x, 2) + ',' + fixed(-p.y, 2) + ')';
+		}
+		this._texData += ';\n';
+	};
+	this.measureText = function(text) {
+		var c = canvas.getContext('2d');
+		c.font = '20px "Times New Romain", serif';
+		return c.measureText(text);
+	};
+	this.advancedFillText = function(text, originalText, x, y, angleOrNull) {
+		if(text.replace(' ', '').length > 0) {
+			var nodeParams = '';
+			// x and y start off as the center of the text, but will be moved to one side of the box when angleOrNull != null
+			if(angleOrNull != null) {
+				var width = this.measureText(text).width;
+				var dx = Math.cos(angleOrNull);
+				var dy = Math.sin(angleOrNull);
+				if(Math.abs(dx) > Math.abs(dy)) {
+					if(dx > 0) nodeParams = '[right] ', x -= width / 2;
+					else nodeParams = '[left] ', x += width / 2;
+				} else {
+					if(dy > 0) nodeParams = '[below] ', y -= 10;
+					else nodeParams = '[above] ', y += 10;
+				}
+			}
+			x *= this._scale;
+			y *= this._scale;
+			this._texData += '\\draw (' + fixed(x, 2) + ',' + fixed(-y, 2) + ') node ' + nodeParams + '{$' + originalText.replace(/ /g, '\\mbox{ }') + '$};\n';
+		}
+	};
 
-function Node(x, y) {
-	this.x = x;
-	this.y = y;
-	this.mouseOffsetX = 0;
-	this.mouseOffsetY = 0;
-	this.isAcceptState = false;
-	this.text = '';
+	this.translate = this.save = this.restore = this.clearRect = function(){};
 }
 
-Node.prototype.setMouseStart = function(x, y) {
-	this.mouseOffsetX = this.x - x;
-	this.mouseOffsetY = this.y - y;
-};
+// draw using this instead of a canvas and call toSVG() afterward
+function ExportAsSVG() {
+	this.fillStyle = 'black';
+	this.strokeStyle = 'black';
+	this.lineWidth = 1;
+	this.font = '12px Arial, sans-serif';
+	this._points = [];
+	this._svgData = '';
+	this._transX = 0;
+	this._transY = 0;
 
-Node.prototype.setAnchorPoint = function(x, y) {
-	this.x = x + this.mouseOffsetX;
-	this.y = y + this.mouseOffsetY;
-};
-
-Node.prototype.draw = function(c) {
-	// draw the circle
-	c.beginPath();
-	c.arc(this.x, this.y, nodeRadius, 0, 2 * Math.PI, false);
-	c.stroke();
-
-	// draw the text
-	drawText(c, this.text, this.x, this.y, null, selectedObject == this);
-
-	// draw a double circle for an accept state
-	if(this.isAcceptState) {
-		c.beginPath();
-		c.arc(this.x, this.y, nodeRadius - 6, 0, 2 * Math.PI, false);
-		c.stroke();
-	}
-};
-
-Node.prototype.closestPointOnCircle = function(x, y) {
-	var dx = x - this.x;
-	var dy = y - this.y;
-	var scale = Math.sqrt(dx * dx + dy * dy);
-	return {
-		'x': this.x + dx * nodeRadius / scale,
-		'y': this.y + dy * nodeRadius / scale,
+	this.toSVG = function() {
+		return '<?xml version="1.0" standalone="no"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n\n<svg width="800" height="600" version="1.1" xmlns="http://www.w3.org/2000/svg">\n' + this._svgData + '</svg>\n';
 	};
-};
 
-Node.prototype.containsPoint = function(x, y) {
-	return (x - this.x)*(x - this.x) + (y - this.y)*(y - this.y) < nodeRadius*nodeRadius;
-};
+	this.beginPath = function() {
+		this._points = [];
+	};
+	this.arc = function(x, y, radius, startAngle, endAngle, isReversed) {
+		x += this._transX;
+		y += this._transY;
+		var style = 'stroke="' + this.strokeStyle + '" stroke-width="' + this.lineWidth + '" fill="none"';
+
+		if(endAngle - startAngle == Math.PI * 2) {
+			this._svgData += '\t<ellipse ' + style + ' cx="' + fixed(x, 3) + '" cy="' + fixed(y, 3) + '" rx="' + fixed(radius, 3) + '" ry="' + fixed(radius, 3) + '"/>\n';
+		} else {
+			if(isReversed) {
+				var temp = startAngle;
+				startAngle = endAngle;
+				endAngle = temp;
+			}
+
+			if(endAngle < startAngle) {
+				endAngle += Math.PI * 2;
+			}
+
+			var startX = x + radius * Math.cos(startAngle);
+			var startY = y + radius * Math.sin(startAngle);
+			var endX = x + radius * Math.cos(endAngle);
+			var endY = y + radius * Math.sin(endAngle);
+			var useGreaterThan180 = (Math.abs(endAngle - startAngle) > Math.PI);
+			var goInPositiveDirection = 1;
+
+			this._svgData += '\t<path ' + style + ' d="';
+			this._svgData += 'M ' + fixed(startX, 3) + ',' + fixed(startY, 3) + ' '; // startPoint(startX, startY)
+			this._svgData += 'A ' + fixed(radius, 3) + ',' + fixed(radius, 3) + ' '; // radii(radius, radius)
+			this._svgData += '0 '; // value of 0 means perfect circle, others mean ellipse
+			this._svgData += +useGreaterThan180 + ' ';
+			this._svgData += +goInPositiveDirection + ' ';
+			this._svgData += fixed(endX, 3) + ',' + fixed(endY, 3); // endPoint(endX, endY)
+			this._svgData += '"/>\n';
+		}
+	};
+	this.moveTo = this.lineTo = function(x, y) {
+		x += this._transX;
+		y += this._transY;
+		this._points.push({ 'x': x, 'y': y });
+	};
+	this.stroke = function() {
+		if(this._points.length == 0) return;
+		this._svgData += '\t<polygon stroke="' + this.strokeStyle + '" stroke-width="' + this.lineWidth + '" points="';
+		for(var i = 0; i < this._points.length; i++) {
+			this._svgData += (i > 0 ? ' ' : '') + fixed(this._points[i].x, 3) + ',' + fixed(this._points[i].y, 3);
+		}
+		this._svgData += '"/>\n';
+	};
+	this.fill = function() {
+		if(this._points.length == 0) return;
+		this._svgData += '\t<polygon fill="' + this.fillStyle + '" stroke-width="' + this.lineWidth + '" points="';
+		for(var i = 0; i < this._points.length; i++) {
+			this._svgData += (i > 0 ? ' ' : '') + fixed(this._points[i].x, 3) + ',' + fixed(this._points[i].y, 3);
+		}
+		this._svgData += '"/>\n';
+	};
+	this.measureText = function(text) {
+		var c = canvas.getContext('2d');
+		c.font = '20px "Times New Romain", serif';
+		return c.measureText(text);
+	};
+	this.fillText = function(text, x, y) {
+		x += this._transX;
+		y += this._transY;
+		if(text.replace(' ', '').length > 0) {
+			this._svgData += '\t<text x="' + fixed(x, 3) + '" y="' + fixed(y, 3) + '" font-family="Times New Roman" font-size="20">' + textToXML(text) + '</text>\n';
+		}
+	};
+	this.translate = function(x, y) {
+		this._transX = x;
+		this._transY = y;
+	};
+
+	this.save = this.restore = this.clearRect = function(){};
+}
 
 var greekLetterNames = [ 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa', 'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron', 'Pi', 'Rho', 'Sigma', 'Tau', 'Upsilon', 'Phi', 'Chi', 'Psi', 'Omega' ];
-
+var unaryOps = [ 'Cap', 'Cup' ];
+var otherOps = [ 'Emptyset', 'Leftarrow', 'Rightarrow' ];
 /*
  Return true if the user has directed edges on, false otherwise.
  */
@@ -610,10 +636,24 @@ function convertLatexShortcuts(text) {
 		text = text.replace(new RegExp('\\\\' + name.toLowerCase(), 'g'), String.fromCharCode(945 + i + (i > 16)));
 	}
 
+	// unary operators
+	for(var i = 0; i < unaryOps.length; i++) {
+		var name = unaryOps[i];
+		text = text.replace(new RegExp('\\\\' + name.toLowerCase(), 'g'), String.fromCharCode(8745 + i));
+	}
 	// subscripts
 	for(var i = 0; i < 10; i++) {
 		text = text.replace(new RegExp('_' + i, 'g'), String.fromCharCode(8320 + i));
 	}
+
+	// superscripts
+	text = text.replace(new RegExp('\\^\\+', 'g'), String.fromCharCode(8314));
+
+	// other operators
+	text = text.replace(new RegExp('\\\\' + otherOps[0].toLowerCase(),'g'), String.fromCharCode(8709));
+	text = text.replace(new RegExp('\\\\' + otherOps[1].toLowerCase(),'g'), String.fromCharCode(8592));
+	text = text.replace(new RegExp('\\\\' + otherOps[2].toLowerCase(),'g'), String.fromCharCode(8594));
+	
 
 	return text;
 }
@@ -648,7 +688,7 @@ function canvasHasFocus() {
 
 function drawText(c, originalText, x, y, angleOrNull, isSelected) {
 	text = convertLatexShortcuts(originalText);
-	c.font = '20px "Roboto", "Ubuntu", "Segoe UI", "Calibri", sans-serif';
+	c.font = '20px "Times New Roman", serif';
 	var width = c.measureText(text).width;
 
 	// center the text
@@ -873,7 +913,7 @@ function snapNode(node) {
 
 window.onload = function() {
 
-	document.getElementById("clearCanvas").onclick =
+	document.getElementById("clearCanvas").onclick = 
 	function(){
 		var element = document.getElementById('coinfiring');
 		element.checked = false;
@@ -1089,7 +1129,8 @@ document.onkeypress = function(e) {
 	if(!canvasHasFocus()) {
 		// don't read keystrokes when other things have focus
 		return true;
-	} else if(key >= 0x20 && key <= 0x7E && !e.metaKey && !e.altKey && !e.ctrlKey && selectedObject != null && 'text' in selectedObject) {
+	} else if(key >= 0x20 && key <= 0x7E && !e.metaKey && !e.altKey && !e.ctrlKey 
+		&& selectedObject != null && 'text' in selectedObject) {
 		selectedObject.text += String.fromCharCode(key);
 		resetCaret();
 		draw();
@@ -1146,15 +1187,10 @@ function output(text, showInput) {
 function saveAsPNG() {
 	var oldSelectedObject = selectedObject;
 	selectedObject = null;
-	drawUsing(canvas.getContext("2d"));
+	drawUsing(canvas.getContext('2d'));
 	selectedObject = oldSelectedObject;
-	var pngData = canvas.toDataURL("image/png");
-	var pngLink = document.getElementById("pngLink");
-	pngLink.download = "fsm.png";
-	pngLink.href = pngData.replace(
-	/^data:image\/[^;]/,
-	"data:application/octet-stream"
-	);
+	var pngData = canvas.toDataURL('image/png');
+	document.location.href = pngData;
 }
 
 function saveAsSVG() {

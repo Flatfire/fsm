@@ -185,7 +185,7 @@
 	<h1>Finite State Machine and Graph Designer</h1>
 	<div class="center">
 		<input type="checkbox" id="directed" checked="true"> Directed Edges
-		<input type="checkbox" id="gridsnap" checked="true"> Snap to Grid
+		<input type="checkbox" id="gridsnap" checked="false"> Snap to Grid
 		<input type="checkbox" id="coinfiring"> Chip Firing Mode
 		<br />
 		<br />
@@ -232,7 +232,12 @@
 					(like "S_0")
 				</li>
 				<li>
+					<b>Type GNFA symbols:</b> click on a state or arrow, then type LaTeX command (like "\cup, \cap), or ^+ for superscript +")
+				<li>
 					<b>Type greek letter:</b> put a backslash before it (like "\beta")
+				</li>
+				<li>
+					<b>Additional symbols:</b> Type "\emptyset" for ∅, "\rightarrow" for →, and "\leftarrow" for ←.
 				</li>
 			</ul>
 			<p>This also includes functionality used for simulating chip-firing games. When in chip firing mode, the following happen:</p>
@@ -249,6 +254,9 @@
 		<div>
 			<h2>Changelog and attributions:</h2>
 			<ul>
+				<li>Update by <a href="https://github.com/flatfire" target="_blank">Greg Savage</a> in 2022
+					&middot; Live webpage: <a href="https://flatfire.gitlab.io/fsm/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/flatfire/fsm" target="_blank">GitHub</a></li>
 				<li>Update by <a href="https://sammdu.com" target="_blank">Samm Du</a> in 2021
 					&middot; Live webpage: <a href="https://sammdu.gitlab.io/fsm/" target="_blank">visit here</a>
 					&middot; Git repo: <a href="https://github.com/sammdu/fsm" target="_blank">GitHub</a> |

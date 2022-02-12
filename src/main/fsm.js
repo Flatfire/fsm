@@ -1,5 +1,6 @@
 var greekLetterNames = [ 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa', 'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron', 'Pi', 'Rho', 'Sigma', 'Tau', 'Upsilon', 'Phi', 'Chi', 'Psi', 'Omega' ];
-
+var unaryOps = [ 'Cap', 'Cup' ];
+var otherOps = [ 'Emptyset', 'Leftarrow', 'Rightarrow' ];
 /*
  Return true if the user has directed edges on, false otherwise.
  */
@@ -17,10 +18,24 @@ function convertLatexShortcuts(text) {
 		text = text.replace(new RegExp('\\\\' + name.toLowerCase(), 'g'), String.fromCharCode(945 + i + (i > 16)));
 	}
 
+	// unary operators
+	for(var i = 0; i < unaryOps.length; i++) {
+		var name = unaryOps[i];
+		text = text.replace(new RegExp('\\\\' + name.toLowerCase(), 'g'), String.fromCharCode(8745 + i));
+	}
 	// subscripts
 	for(var i = 0; i < 10; i++) {
 		text = text.replace(new RegExp('_' + i, 'g'), String.fromCharCode(8320 + i));
 	}
+
+	// superscripts
+	text = text.replace(new RegExp('\\^\\+', 'g'), String.fromCharCode(8314));
+
+	// other operators
+	text = text.replace(new RegExp('\\\\' + otherOps[0].toLowerCase(),'g'), String.fromCharCode(8709));
+	text = text.replace(new RegExp('\\\\' + otherOps[1].toLowerCase(),'g'), String.fromCharCode(8592));
+	text = text.replace(new RegExp('\\\\' + otherOps[2].toLowerCase(),'g'), String.fromCharCode(8594));
+	
 
 	return text;
 }
@@ -496,7 +511,8 @@ document.onkeypress = function(e) {
 	if(!canvasHasFocus()) {
 		// don't read keystrokes when other things have focus
 		return true;
-	} else if(key >= 0x20 && key <= 0x7E && !e.metaKey && !e.altKey && !e.ctrlKey && selectedObject != null && 'text' in selectedObject) {
+	} else if(key >= 0x20 && key <= 0x7E && !e.metaKey && !e.altKey && !e.ctrlKey 
+		&& selectedObject != null && 'text' in selectedObject) {
 		selectedObject.text += String.fromCharCode(key);
 		resetCaret();
 		draw();
