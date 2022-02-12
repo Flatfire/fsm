@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<title>Finite State Machine and Graph Designer</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style>
+		html
+		{
+			margin: 0 0;
+			padding: 0 0;
+		}
+		body
+		{
+			text-align: center;
+			background: #f6faff;
+			margin: 0 0;
+			padding: 0 0;
+			font-family: "Roboto", "Ubuntu", "Segoe UI", "Calibri", sans-serif;
+		}
+
+		h1
+		{
+			color: #073042;
+			font-size: 2.5em;
+		}
+
+		canvas
+		{
+			display: block;
+			width: 95%;
+			max-width: 800px;
+			margin: 2.5rem auto;
+			background: white;
+			border-radius: 1rem;
+			box-shadow: 0 0.2rem 1.4rem 0 rgba(0, 0, 0, 0.2);
+		}
+
+		a
+		{
+			color: #1a73e8;
+		}
+
+		a:hover
+		{
+			text-decoration: none;
+		}
+
+		div
+		{
+			margin: 30px auto;
+			padding: 0 2rem;
+			text-align: left;
+			max-width: 800px;
+		}
+
+		footer div
+		{
+			margin: 0 auto;
+		}
+
+		footer a
+		{
+			/* color: inherit; */
+			color: #eff7cf;
+		}
+
+		footer
+		{
+			background-color: #073042;
+			color: #ffffff;
+			padding: 2rem 0;
+		}
+
+		.error
+		{
+			display: block;
+			color: #ff4646;
+			font-size: 28px;
+			line-height: 30px;
+			padding: 30px;
+		}
+
+		p
+		{
+			margin: 1rem 0;
+			line-height: 1.5rem;
+		}
+
+		ul
+		{
+			line-height: 1.5rem;
+		}
+
+		.center
+		{
+			text-align: center;
+			line-height: 1.5rem;
+		}
+
+		.centerelement
+		{
+			margin: auto;
+		}
+
+		textarea
+		{
+			display: none;
+			width: 75%;
+			height: 400px;
+			margin: 1.5em auto;
+			font-family: "Ubuntu Mono", monospace;
+		}
+
+		input[type=checkbox]
+		{
+			width: 1rem;
+			height: 1rem;
+		}
+
+		button
+		{
+			padding: 0.8rem 1rem;
+			margin: 0 0.5rem;
+			border: none;
+			border-radius: 10rem;
+			background-color: #3ddc84;
+			color: #073042;
+			font-weight: bold;
+			transition: all 0.05s;
+		}
+		button:hover
+		{
+			box-shadow: 0 0.1rem 0.4rem 0 rgba(0, 0, 0, 0.3);
+			transform: scale(1.02);
+		}
+		button:active
+		{
+			box-shadow: none;
+			transform: scale(1);
+		}
+	</style>
+	<script src="fsm.js"></script>
+	<script>
+		/*
+		 * base64.js - Base64 encoding and decoding functions
+		 *
+		 * See: http://developer.mozilla.org/en/docs/DOM:window.btoa
+		 *      http://developer.mozilla.org/en/docs/DOM:window.atob
+		 *
+		 * Copyright (c) 2007, David Lindquist <david.lindquist@gmail.com>
+		 * Released under the MIT license
+		 */
+
+		if (typeof btoa == 'undefined')
+		{
+			function btoa(str)
+			{
+				var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+				var encoded = [];
+				var c = 0;
+				while (c < str.length)
+				{
+					var b0 = str.charCodeAt(c++);
+					var b1 = str.charCodeAt(c++);
+					var b2 = str.charCodeAt(c++);
+					var buf = (b0 << 16) + ((b1 || 0) << 8) + (b2 || 0);
+					var i0 = (buf & (63 << 18)) >> 18;
+					var i1 = (buf & (63 << 12)) >> 12;
+					var i2 = isNaN(b1) ? 64 : (buf & (63 << 6)) >> 6;
+					var i3 = isNaN(b2) ? 64 : (buf & 63);
+					encoded[encoded.length] = chars.charAt(i0);
+					encoded[encoded.length] = chars.charAt(i1);
+					encoded[encoded.length] = chars.charAt(i2);
+					encoded[encoded.length] = chars.charAt(i3);
+				}
+				return encoded.join('');
+			}
+		}
+	</script>
+</head>
+
+<body>
+	<h1>Finite State Machine and Graph Designer</h1>
+	<div class="center">
+		<input type="checkbox" id="directed" checked="true"> Directed Edges
+		<input type="checkbox" id="gridsnap" checked="false"> Snap to Grid
+		<input type="checkbox" id="coinfiring"> Chip Firing Mode
+		<br />
+		<br />
+		<button id="clearNodes">Clear all Nodes</button>
+		<button id="clearCanvas">Clear the Canvas</button>
+	</div>
+	<canvas id="canvas" width="800" height="600">
+		<span class="error">Your browser does not support<br>the HTML5 &lt;canvas&gt; element</span>
+	</canvas>
+	<div>
+		<p class="center">
+			Export as: <a href="javascript:saveAsJSON()">JSON</a> |
+			<a id="pngLink" onclick="saveAsPNG()" href="">PNG</a> |
+			<a href="javascript:saveAsSVG()">SVG</a> |
+			<a href="javascript:saveAsLaTeX()">LaTeX</a> |
+			Import from: <a href="javascript:loadFromJSON()">JSON</a>
+		</p>
+		<textarea id="output"></textarea>
+		<p class="center"><button id="importButton" hidden>Import</button></p>
+		<article>
+			<h2>Usage instructions:</h2>
+			<p>The big white box above is the FSM designer.</p>
+			<ul>
+				<li><b>Add a state:</b> double-click on the canvas</li>
+				<li><b>Add an arrow:</b> shift-drag on the canvas</li>
+				<ul>
+					<li><b>Add a start arrow:</b> shift-drag outside of a state</li>
+					<li>
+						<b>Add an self-linking arrow:</b> shift-click on state or shitf-drag
+						back to state
+					</li>
+					<li>
+						<b>Create a curved arrow:</b> shift-click and drag existing arrow
+					</li>
+				</ul>
+				<li><b>Move something:</b> drag it around</li>
+				<li><b>Label something:</b> click on a state or arrow</li>
+				<li>
+					<b>Delete something:</b> click it and press the delete key
+				</li>
+				<li><b>Make accept state:</b> double-click on an existing state</li>
+				<li>
+					<b>Type numeric subscript:</b> put an underscore before the number
+					(like "S_0")
+				</li>
+				<li>
+					<b>Type GNFA symbols:</b> click on a state or arrow, then type LaTeX command (like "\cup, \cap), or ^+ for superscript +")
+				<li>
+					<b>Type greek letter:</b> put a backslash before it (like "\beta")
+				</li>
+				<li>
+					<b>Additional symbols:</b> Type "\emptyset" for ∅, "\rightarrow" for →, and "\leftarrow" for ←.
+				</li>
+			</ul>
+			<p>This also includes functionality used for simulating chip-firing games. When in chip firing mode, the following happen:</p>
+			<ul>
+				<li>Adding or deleting vertices or edges is disabled</li>
+				<li>Clicking a vertex "fires" that vertex, giving away 1 chip from that vertex to each vertex it connects to</li>
+				<li>Shift clicking undoes the "firing" of that vertex</li>
+				<li>Empty vertices are treated as having zero chips on them</li>
+				<li>An edge with a numerical label indicates the "weight" of the edge, causing that many chips to be fired along that edge instead of only one</li>
+			</ul>
+		</article>
+	</div>
+	<footer>
+		<div>
+			<h2>Changelog and attributions:</h2>
+			<ul>
+				<li>Update by <a href="https://github.com/flatfire" target="_blank">Greg Savage</a> in 2022
+					&middot; Live webpage: <a href="https://flatfire.gitlab.io/fsm/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/flatfire/fsm" target="_blank">GitHub</a></li>
+				<li>Update by <a href="https://sammdu.com" target="_blank">Samm Du</a> in 2021
+					&middot; Live webpage: <a href="https://sammdu.gitlab.io/fsm/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/sammdu/fsm" target="_blank">GitHub</a> |
+							  <a href="https://gitlab.com/sammdu/fsm" target="_blank">GitLab</a>
+				</li>
+				<li>Update by <a href="https://wilsonem.github.io/" target="_blank">Emily Wilson</a> in 2020
+					&middot; Live webpage: <a href="https://wilsonem.github.io/fsm/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/wilsonem/fsm" target="_blank">GitHub</a>
+				</li>
+				<li>Update by <a href="https://markusfeng.com" target="_blank">Markus Feng</a> in 2019
+					&middot; Live webpage: <a href="https://markusfeng.com/projects/graph/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/nomoid/fsm" target="_blank">GitHub</a>
+				</li>
+				<li>Update by <a href="https://sa.muel.green/" target="_blank">Samuel Green</a> in 2015
+					&middot; Live webpage: <a href="https://sa.muel.green/fsm/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/greensam/fsm" target="_blank">GitHub</a>
+				</li>
+				<li>Original by <a href="http://madebyevan.com/" target="_blank">Evan Wallace</a> in 2015
+					&middot; Live webpage: <a href="http://madebyevan.com/fsm/" target="_blank">visit here</a>
+					&middot; Git repo: <a href="https://github.com/evanw/fsm" target="_blank">GitHub</a>
+				</li>
+			</ul>
+			<p>The Finite State Machine and Graph Designer is released under the
+				<a href="https://github.com/sammdu/fsm/blob/master/LICENSE" target="_blank">MIT License</a>.
+			</p>
+		</div>
+	</footer>
+</body>
+
+</html>
