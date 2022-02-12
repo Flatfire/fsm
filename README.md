@@ -3,6 +3,7 @@
 ### [Click here to use the app!](https://sammdu.gitlab.io/fsm/)
 
 ## Changelog and attributions:
+* Update by [Greg Savage](https://github.com/Flatfire) in 2022; [GitHub](https://github.com/flatfire/fsm)
 * Update by [Samm Du](https://sammdu.com/) in 2021 &middot; [Live webpage](https://sammdu.gitlab.io/fsm/) &middot; [GitHub](https://github.com/sammdu/fsm) | [GitLab](https://gitlab.com/sammdu/fsm)
 * Update by [Emily Wilson](https://wilsonem.github.io/) in 2020 &middot; [Live webpage](https://wilsonem.github.io/fsm/) &middot; [GitHub](https://github.com/wilsonem/fsm)
 * Update by [Markus Feng](https://markusfeng.com/) in 2019 &middot; [Live webpage](https://markusfeng.com/projects/graph/) &middot; [GitHub](https://github.com/nomoid/fsm)
