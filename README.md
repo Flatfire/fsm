@@ -1,6 +1,6 @@
 # Finite State Machine and Graph Designer
 
-### [Click here to use the app!](https://flatfire.gitlab.io/fsm/)
+### [Click here to use the app!](https://flatfire.github.io/fsm/)
 
 ## Changelog and attributions:
 * Update by [Greg Savage](https://github.com/Flatfire) in 2022; [GitHub](https://github.com/flatfire/fsm)
